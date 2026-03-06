@@ -29,7 +29,7 @@ RAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augmented G
 | 기능 | 설명 |
 |------|------|
 | **하이브리드 검색** | PGVector 벡터 검색 + Elasticsearch+Nori 키워드 검색 결합. 가중치 조절 가능 |
-| **Auto 검색 정책** | `search_mode=auto`에서 질의 분류(extraction/regulatory/explanatory + 관계형 키워드) 기반으로 벡터/키워드/그래프 가중치 자동 조정 |
+| **Auto 검색 정책** | `search_mode=auto`에서 Query Planner가 질의를 분류해 `vector_only`/`hybrid`/`hybrid+graph` 경로를 자동 선택하고, 품질 미달 시 fallback 수행 |
 | **그래프 검색(선택)** | Neo4j 기반 `graph_only` 및 hybrid/auto 내 graph 결합 검색 지원 |
 | **한국어 리랭커** | `dragonkue/bge-reranker-v2-m3-ko` -- 한국어 AutoRAG F1=0.9123 전체 1위 |
 | **HyDE** | Hypothetical Document Embeddings -- LLM이 가상 문서를 생성하여 검색 정확도 향상 |
@@ -68,6 +68,12 @@ RAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augmented G
      | + PGVector    |  | + Nori        |  | (Celery 큐)   |
      | (벡터 저장소) |  | (키워드 검색) |  |               |
      +---------------+  +---------------+  +---------------+
+                                 |
+                                 v
+                          +-------------+
+                          | Neo4j (선택) |
+                          | (Graph 검색) |
+                          +-------------+
 
               +------------------+------------------+
               |                  |                  |
@@ -150,7 +156,8 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=changeme
 # 기본은 UI 설정값 사용, 강제 시에만 true
 RAG_GRAPH_OVERRIDE=false
-RAG_GRAPH_ENABLED=true
+# RAG_GRAPH_OVERRIDE=true일 때만 적용됨
+RAG_GRAPH_ENABLED=
 
 # 선택: RAGAS 평가 모델
 RAGAS_LLM_PROVIDER=ollama
@@ -182,6 +189,10 @@ ollama pull bge-m3
 ollama pull exaone3.5:7.8b
 ```
 
+참고:
+- `RAG_GRAPH_OVERRIDE=false`면 관리자 UI/DB 설정(`graph_enabled`)이 우선이다.
+- `RAG_GRAPH_OVERRIDE=true`면 `RAG_GRAPH_ENABLED`가 런타임 설정을 강제로 덮어쓴다.
+
 ### Step 3: 공유 인프라 실행
 
 PostgreSQL+PGVector, Elasticsearch+Nori, Redis를 실행한다.
@@ -204,6 +215,10 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 # shared-elasticsearch Up ...
 # shared-redis        Up ...
 ```
+
+주의:
+- `infra/docker-compose.yml` 실행 시 `POSTGRES_PASSWORD`가 비어 있으면 경고가 출력된다.
+- 루트 `.env`에 `POSTGRES_PASSWORD`를 명시한 뒤 실행하는 것을 권장한다.
 
 ### Step 4: 백엔드 설정
 
