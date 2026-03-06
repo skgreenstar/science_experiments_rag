@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
     from app.services.generation.evidence_extractor import EvidenceExtractor
     from app.services.guardrails.numeric_verifier import NumericVerifier
     from app.services.hyde.generator import HyDEGenerator
+    from app.services.providers import build_embedding_provider, build_llm_provider
     from app.services.reranking.korean import KoreanCrossEncoder
     from app.services.search.hybrid import HybridSearchOrchestrator
     from app.services.search.keyword_es import ElasticsearchNoriEngine
@@ -38,16 +39,12 @@ async def lifespan(app: FastAPI):
     from app.services.search.vector import VectorSearchEngine
     from app.services.settings import SettingsService
 
-    # RAG 설정 로드 (embedding_model 등)
-    from app.services.embedding.openai import OpenAIEmbedding
+    # RAG 설정 로드 (provider/model 등)
     async with _async_session_factory() as _s:
         _ss = SettingsService(db=_s)
         _rag = await _ss.get_settings()
-    embedder = OpenAIEmbedding(api_key=env.openai_api_key, model=_rag.embedding_model, dimensions=1536)
-
-    # LLM: OpenAI gpt-4.1-mini
-    from app.services.generation.openai import OpenAILLM
-    llm = OpenAILLM(api_key=env.openai_api_key, model="gpt-4.1-mini")
+    embedder = build_embedding_provider(env, _rag)
+    llm = build_llm_provider(env, _rag)
 
     vector_engine = VectorSearchEngine(session_factory=_async_session_factory)
     keyword_engine = ElasticsearchNoriEngine(es_url=env.elasticsearch_url)
@@ -90,7 +87,7 @@ async def lifespan(app: FastAPI):
     app.state.langfuse_monitor.flush()
 
 
-app = FastAPI(title="UrstoryRAG", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="RAG", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -32,7 +32,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1 px-3 py-4">
       <div className="mb-4 px-3">
-        <h1 className="text-lg font-bold">UrstoryRAG</h1>
+        <h1 className="text-lg font-bold">RAG</h1>
         <p className="text-xs text-muted-foreground">관리자 콘솔</p>
       </div>
       {navItems.map((item) => {

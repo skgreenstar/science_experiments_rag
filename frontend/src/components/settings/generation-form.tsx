@@ -34,8 +34,8 @@ export function GenerationForm() {
   const form = useForm<GenerationFormData>({
     resolver: zodResolver(generationSchema),
     values: {
-      provider: settings?.llm_provider ?? "openai",
-      model: settings?.llm_model ?? "gpt-4.1-mini",
+      provider: settings?.llm_provider ?? "ollama",
+      model: settings?.llm_model ?? "exaone3.5:7.8b",
       system_prompt: settings?.system_prompt ?? "당신은 사내 문서를 기반으로 질문에 답변하는 AI 어시스턴트입니다.",
     },
   });

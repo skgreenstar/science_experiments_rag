@@ -3,7 +3,7 @@ import time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import RAGSettings
+from app.config import RAGSettings, apply_env_model_overrides
 from app.models.database import Setting
 
 CACHE_TTL = 60.0  # 60초
@@ -20,6 +20,7 @@ class SettingsService:
             return self._cache
 
         settings = await self._load_from_db()
+        settings = apply_env_model_overrides(settings)
         self._cache = settings
         self._cache_time = time.time()
         return settings

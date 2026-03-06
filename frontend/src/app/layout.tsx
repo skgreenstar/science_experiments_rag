@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UrstoryRAG 관리자",
+  title: "RAG 관리자",
   description: "한국어 RAG 프로덕션 시스템 관리자 콘솔",
 };
 

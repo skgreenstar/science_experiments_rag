@@ -252,6 +252,7 @@ export interface TraceSpan {
 export interface Trace {
   id: string;
   query: string;
+  output?: string;
   total_duration_ms: number;
   status: "success" | "error";
   spans: TraceSpan[];

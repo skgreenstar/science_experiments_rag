@@ -49,8 +49,10 @@ export function DocumentUpload() {
       toast.success("문서가 업로드되었습니다.");
       setSelectedFile(null);
       setOpen(false);
-    } catch {
-      toast.error("업로드에 실패했습니다.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "업로드에 실패했습니다.";
+      toast.error(`업로드 실패: ${message}`);
     }
   };
 

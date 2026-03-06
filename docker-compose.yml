@@ -11,12 +11,63 @@ services:
       ELASTICSEARCH_URL: http://shared-elasticsearch:9200
       OLLAMA_URL: http://host.docker.internal:11434
       REDIS_URL: redis://shared-redis:6379
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-200}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-ollama}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-bge-m3}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-1024}
+      RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
+      RAG_LLM_MODEL: ${RAG_LLM_MODEL:-exaone3.5:7.8b}
+      RAG_LLM_TEMPERATURE: ${RAG_LLM_TEMPERATURE:-0.3}
+      RAG_HYDE_MODEL: ${RAG_HYDE_MODEL:-}
+      RAG_MULTI_QUERY_MODEL: ${RAG_MULTI_QUERY_MODEL:-}
+      RAG_CONTEXTUAL_CHUNKING_MODEL: ${RAG_CONTEXTUAL_CHUNKING_MODEL:-}
+      RAGAS_LLM_PROVIDER: ${RAGAS_LLM_PROVIDER:-ollama}
+      RAGAS_LLM_MODEL: ${RAGAS_LLM_MODEL:-exaone3.5:7.8b}
+      RAGAS_EMBEDDING_PROVIDER: ${RAGAS_EMBEDDING_PROVIDER:-ollama}
+      RAGAS_EMBEDDING_MODEL: ${RAGAS_EMBEDDING_MODEL:-bge-m3}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse-web:3000}
     depends_on: {}
+    volumes:
+      - backend_uploads:/app/uploads
+    restart: unless-stopped
+
+  rag-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-worker
+    command: celery -A app.worker.celery_app worker --loglevel=info --pool=solo
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-changeme_strong_password}@shared-postgres:5432/${POSTGRES_DB:-shared}
+      ELASTICSEARCH_URL: http://shared-elasticsearch:9200
+      OLLAMA_URL: http://host.docker.internal:11434
+      REDIS_URL: redis://shared-redis:6379
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-200}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-ollama}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-bge-m3}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-1024}
+      RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
+      RAG_LLM_MODEL: ${RAG_LLM_MODEL:-exaone3.5:7.8b}
+      RAG_LLM_TEMPERATURE: ${RAG_LLM_TEMPERATURE:-0.3}
+      RAG_HYDE_MODEL: ${RAG_HYDE_MODEL:-}
+      RAG_MULTI_QUERY_MODEL: ${RAG_MULTI_QUERY_MODEL:-}
+      RAG_CONTEXTUAL_CHUNKING_MODEL: ${RAG_CONTEXTUAL_CHUNKING_MODEL:-}
+      RAGAS_LLM_PROVIDER: ${RAGAS_LLM_PROVIDER:-ollama}
+      RAGAS_LLM_MODEL: ${RAGAS_LLM_MODEL:-exaone3.5:7.8b}
+      RAGAS_EMBEDDING_PROVIDER: ${RAGAS_EMBEDDING_PROVIDER:-ollama}
+      RAGAS_EMBEDDING_MODEL: ${RAGAS_EMBEDDING_MODEL:-bge-m3}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse-web:3000}
+    depends_on: {}
+    volumes:
+      - backend_uploads:/app/uploads
     restart: unless-stopped
 
   # --- Langfuse v3 ---
@@ -27,7 +78,7 @@ services:
     ports:
       - "3100:3000"
     environment: &langfuse-env
-      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-changeme_strong_password}@shared-postgres:5432/${POSTGRES_DB:-shared}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-changeme_strong_password}@shared-postgres:5432/${POSTGRES_DB:-shared}?schema=langfuse
       NEXTAUTH_URL: http://localhost:3100
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-changeme_nextauth_secret}
       SALT: ${SALT:-changeme_salt_string}
@@ -36,7 +87,8 @@ services:
       CLICKHOUSE_URL: http://rag-clickhouse:8123
       CLICKHOUSE_MIGRATION_URL: clickhouse://rag-clickhouse:9000
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-langfuse_clickhouse_password}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
       # Redis (Langfuse 전용)
       REDIS_HOST: langfuse-redis
       REDIS_PORT: 6379
@@ -80,7 +132,7 @@ services:
     container_name: rag-clickhouse
     environment:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-langfuse_clickhouse_password}
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     healthcheck:
@@ -107,6 +159,9 @@ services:
     image: minio/minio:latest
     container_name: langfuse-minio
     command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -120,6 +175,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  backend_uploads:
   clickhouse_data:
   langfuse_redis_data:
   langfuse_minio_data:

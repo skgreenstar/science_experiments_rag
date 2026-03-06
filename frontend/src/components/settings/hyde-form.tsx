@@ -27,7 +27,7 @@ export function HyDEForm() {
     resolver: zodResolver(hydeSchema),
     values: {
       enabled: settings?.hyde_enabled ?? true,
-      model: settings?.hyde_model ?? "gpt-4.1-mini",
+      model: settings?.hyde_model ?? "exaone3.5:7.8b",
     },
   });
 

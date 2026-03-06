@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-60 p-0">
+        <SheetContent side="left" className="w-60 p-0" data-testid="mobile-sidebar">
           <ScrollArea className="h-full">
             <Sidebar onNavigate={() => setMobileOpen(false)} />
           </ScrollArea>

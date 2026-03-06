@@ -31,6 +31,7 @@ async def create_processor():
     from app.services.document.converter import DocumentConverter
     from app.services.document.indexer import DocumentIndexer
     from app.services.document.processor import DocumentProcessor
+    from app.services.providers import build_embedding_provider, build_llm_provider
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     settings = get_settings()
@@ -45,9 +46,8 @@ async def create_processor():
     rag_settings = await settings_service.get_settings()
     await rag_settings_session.close()
 
-    # 임베딩: OpenAI (설정에서 모델명 로드)
-    from app.services.embedding.openai import OpenAIEmbedding
-    embedding = OpenAIEmbedding(api_key=settings.openai_api_key, model=rag_settings.embedding_model, dimensions=1536)
+    # 임베딩: 설정 기반(provider/model)
+    embedding = build_embedding_provider(settings, rag_settings)
     converter = DocumentConverter()
 
     from app.services.document.stores.pgvector_store import PgVectorStore
@@ -60,10 +60,11 @@ async def create_processor():
     # Contextual Chunking LLM 프로바이더 (조건부 생성)
     chunk_llm = None
     if rag_settings.contextual_chunking_enabled:
-        from app.services.generation.openai import OpenAILLM
-        chunk_llm = OpenAILLM(
-            api_key=settings.openai_api_key,
+        chunk_llm = build_llm_provider(
+            settings,
+            rag_settings,
             model=rag_settings.contextual_chunking_model,
+            temperature=rag_settings.llm_temperature,
         )
 
     session = session_factory()
@@ -83,9 +84,15 @@ async def create_processor():
 @celery_app.task(bind=True, max_retries=3)
 def index_document_task(self, doc_id: str):
     """문서 인덱싱 비동기 태스크."""
+    async def _run() -> None:
+        file_path = await get_document_file_path(doc_id)
+        processor = await create_processor()
+        try:
+            await processor.process(doc_id, file_path)
+        finally:
+            await processor.db_session.close()
+
     try:
-        file_path = asyncio.run(get_document_file_path(doc_id))
-        processor = asyncio.run(create_processor())
-        asyncio.run(processor.process(doc_id, file_path))
+        asyncio.run(_run())
     except Exception as exc:
         self.retry(exc=exc, countdown=60)

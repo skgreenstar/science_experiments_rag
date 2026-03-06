@@ -30,7 +30,7 @@ async def test_get_default_settings():
         assert data["reranking_enabled"] is True
         assert data["reranker_model"] == "dragonkue/bge-reranker-v2-m3-ko"
         assert data["hyde_enabled"] is True
-        assert data["llm_provider"] == "openai"
+        assert data["llm_provider"] == "ollama"
     finally:
         app.dependency_overrides.clear()
 

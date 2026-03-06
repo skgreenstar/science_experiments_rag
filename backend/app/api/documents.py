@@ -1,14 +1,14 @@
 """문서 CRUD API 엔드포인트."""
 import math
 import os
-import shutil
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import DocumentNotFoundError
+from app.config import get_settings
 from app.models.database import Document, DocumentStatus, get_db
 
 router = APIRouter(tags=["documents"])
@@ -67,19 +67,40 @@ async def upload_document(
 ):
     """파일 업로드 → 즉시 응답 + 비동기 인덱싱."""
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    settings = get_settings()
+    max_bytes = max(settings.upload_max_mb, 1) * 1024 * 1024
 
     # 파일 저장
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename or "unknown")[1]
+    file_type = ext.lstrip(".").lower() if ext else "unknown"
+    allowed_types = {"pdf", "docx", "txt", "md"}
+    if file_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
+
     saved_filename = f"{file_id}{ext}"
     file_path = os.path.join(UPLOAD_DIR, saved_filename)
 
-    with open(file_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
+    file_size = 0
+    try:
+        with open(file_path, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"파일 크기가 너무 큽니다. 최대 {settings.upload_max_mb}MB까지 업로드할 수 있습니다.",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
-    file_size = len(content)
-    file_type = ext.lstrip(".") if ext else "unknown"
+    await file.close()
 
     # DB 저장
     doc = Document(

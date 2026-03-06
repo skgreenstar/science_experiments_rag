@@ -6,7 +6,7 @@ FRONTEND_PID_FILE := .frontend.pid
 # 도움말 (기본 타겟)
 help: ## 사용 가능한 명령어 목록 출력
 	@echo ""
-	@echo "UrstoryRAG - 사용 가능한 명령어"
+	@echo "RAG - 사용 가능한 명령어"
 	@echo "================================"
 	@echo ""
 	@echo "  초기 설정:"

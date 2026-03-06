@@ -13,7 +13,7 @@ RAGSettings 에 따라 검색 파이프라인(vector / keyword / hybrid)을
 """
 from __future__ import annotations
 
-from haystack import Pipeline
+from haystack import Pipeline, component
 from haystack.components.builders import PromptBuilder
 from haystack.components.joiners import DocumentJoiner
 from haystack.components.rankers import TransformersSimilarityRanker
@@ -54,6 +54,36 @@ _RAG_PROMPT_TEMPLATE = """\
 """
 
 
+@component
+class OllamaTextEmbedderStub:
+    """파이프라인 그래프용 Ollama 임베더 스텁.
+
+    실제 검색 실행은 HybridSearchOrchestrator가 담당하므로,
+    여기서는 그래프 구성 검증을 위한 최소 컴포넌트만 제공한다.
+    """
+
+    def __init__(self, model: str, url: str = "http://localhost:11434"):
+        self.model = model
+        self.url = url
+
+    @component.output_types(embedding=list[float])
+    def run(self, text: str) -> dict:
+        return {"embedding": []}
+
+
+@component
+class OllamaGeneratorStub:
+    """파이프라인 그래프용 Ollama 제너레이터 스텁."""
+
+    def __init__(self, model: str, url: str = "http://localhost:11434"):
+        self.model = model
+        self.url = url
+
+    @component.output_types(replies=list[str])
+    def run(self, prompt: str) -> dict:
+        return {"replies": []}
+
+
 def _build_pgvector_connection_string(database_url: str) -> str:
     """SQLAlchemy asyncpg URL → psycopg 동기 URL 로 변환.
 
@@ -92,12 +122,18 @@ def build_search_pipeline(
     needs_joiner = mode == "hybrid"
 
     if needs_vector:
-        # Query Embedder — OpenAI embedding (dimensions=1536 for HNSW compatibility)
-        embedder = OpenAITextEmbedder(
-            model=rag_settings.embedding_model,
-            api_key=Secret.from_env_var("OPENAI_API_KEY"),
-            dimensions=1536,
-        )
+        # Query Embedder — provider별 구성
+        if rag_settings.embedding_provider == "openai":
+            embedder = OpenAITextEmbedder(
+                model=rag_settings.embedding_model,
+                api_key=Secret.from_env_var("OPENAI_API_KEY"),
+                dimensions=env_settings.rag_embedding_dimensions,
+            )
+        else:
+            embedder = OllamaTextEmbedderStub(
+                model=rag_settings.embedding_model,
+                url=env_settings.ollama_url,
+            )
         pipeline.add_component("query_embedder", embedder)
 
         # PGVector Document Store + Retriever
@@ -160,10 +196,16 @@ def build_search_pipeline(
     )
     pipeline.add_component("prompt_builder", prompt_builder)
 
-    llm = OpenAIGenerator(
-        model=rag_settings.llm_model,
-        api_key=Secret.from_env_var("OPENAI_API_KEY"),
-    )
+    if rag_settings.llm_provider == "openai":
+        llm = OpenAIGenerator(
+            model=rag_settings.llm_model,
+            api_key=Secret.from_env_var("OPENAI_API_KEY"),
+        )
+    else:
+        llm = OllamaGeneratorStub(
+            model=rag_settings.llm_model,
+            url=env_settings.ollama_url,
+        )
     pipeline.add_component("llm", llm)
 
     # prompt_builder → llm

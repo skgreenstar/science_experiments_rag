@@ -26,7 +26,14 @@ import type {
   HealthCheck,
 } from "@/types";
 
-const API_BASE = "";
+const API_BASE = (() => {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:8000`;
+  }
+  return process.env.NODE_ENV === "development" ? "http://localhost:8000" : "";
+})();
 
 class ApiError extends Error {
   constructor(

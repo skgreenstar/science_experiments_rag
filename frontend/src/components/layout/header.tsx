@@ -35,11 +35,12 @@ export function Header({ onMenuToggle }: HeaderProps) {
           variant="ghost"
           size="icon"
           className="md:hidden"
+          data-testid="mobile-menu-button"
           onClick={onMenuToggle}
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <span className="text-sm font-medium md:hidden">UrstoryRAG</span>
+        <span className="text-sm font-medium md:hidden">RAG</span>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">시스템 상태</span>

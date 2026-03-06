@@ -49,26 +49,125 @@ class LangfuseMonitor:
     def create_trace(self, name: str, input: str) -> Any:
         if not self.enabled:
             return _NOOP
-        return self._langfuse.trace(name=name, input=input)
+        try:
+            if hasattr(self._langfuse, "trace"):
+                return self._langfuse.trace(name=name, input=input)
+            if hasattr(self._langfuse, "start_span"):
+                span = self._langfuse.start_span(name=name, input={"query": input})
+                # v3 SDK는 trace를 span으로 시작하므로 trace 메타를 함께 업데이트한다.
+                if hasattr(span, "update_trace"):
+                    try:
+                        span.update_trace(name=name, input={"query": input})
+                    except Exception:
+                        pass
+                return span
+        except Exception:
+            return _NOOP
+        return _NOOP
+
+    def end_observation(self, observation: Any, output: Any | None = None) -> None:
+        if not self.enabled or observation is None:
+            return
+        try:
+            if output is not None and hasattr(observation, "update"):
+                observation.update(output=output)
+        except Exception:
+            pass
+        try:
+            if hasattr(observation, "end"):
+                observation.end()
+        except Exception:
+            pass
+
+    def end_trace(
+        self,
+        trace: Any,
+        *,
+        name: str | None = None,
+        input: Any | None = None,
+        output: Any | None = None,
+    ) -> None:
+        if not self.enabled or trace is None:
+            return
+
+        updates: dict[str, Any] = {}
+        if name is not None:
+            updates["name"] = name
+        if input is not None:
+            updates["input"] = input
+        if output is not None:
+            updates["output"] = output
+
+        if updates and hasattr(trace, "update_trace"):
+            try:
+                trace.update_trace(**updates)
+            except Exception:
+                pass
+
+        # trace 객체인 경우 update()로도 루트 필드를 업데이트할 수 있다.
+        if updates and hasattr(trace, "update"):
+            try:
+                trace.update(**updates)
+            except Exception:
+                pass
+
+        try:
+            if hasattr(trace, "end"):
+                trace.end()
+        except Exception:
+            pass
 
     def create_span(self, trace: Any, name: str) -> Any:
         if not self.enabled:
             return _NOOP
-        return trace.span(name=name)
+        try:
+            if hasattr(trace, "span"):
+                return trace.span(name=name)
+            if hasattr(trace, "start_span"):
+                return trace.start_span(name=name)
+            if hasattr(trace, "start_observation"):
+                return trace.start_observation(name=name, as_type="span")
+        except Exception:
+            return _NOOP
+        return _NOOP
 
     def create_generation(
         self, trace: Any, name: str, model: str, input: dict,
     ) -> Any:
         if not self.enabled:
             return _NOOP
-        return trace.generation(name=name, model=model, input=input)
+        try:
+            if hasattr(trace, "generation"):
+                return trace.generation(name=name, model=model, input=input)
+            if hasattr(trace, "start_generation"):
+                return trace.start_generation(name=name, model=model, input=input)
+            if hasattr(trace, "start_observation"):
+                return trace.start_observation(
+                    name=name, as_type="generation", model=model, input=input,
+                )
+        except Exception:
+            return _NOOP
+        return _NOOP
 
     def score(self, trace_id: str, name: str, value: float) -> None:
         if not self.enabled:
             return
-        self._langfuse.score(trace_id=trace_id, name=name, value=value)
+        if not trace_id:
+            return
+        try:
+            if hasattr(self._langfuse, "score"):
+                self._langfuse.score(trace_id=trace_id, name=name, value=value)
+                return
+            if hasattr(self._langfuse, "create_score"):
+                self._langfuse.create_score(trace_id=trace_id, name=name, value=value)
+                return
+        except Exception:
+            return
 
     def flush(self) -> None:
         if not self.enabled:
             return
-        self._langfuse.flush()
+        try:
+            self._langfuse.flush()
+        except Exception:
+            return

@@ -1,11 +1,13 @@
 """한국어 특화 Cross-Encoder 리랭커."""
 from __future__ import annotations
 
+import asyncio
+import logging
 import math
 
-from sentence_transformers import CrossEncoder
-
 from app.models.schemas import SearchResult
+
+logger = logging.getLogger(__name__)
 
 
 def _sigmoid(x: float) -> float:
@@ -33,8 +35,20 @@ class KoreanCrossEncoder:
     def __init__(
         self,
         model_name: str = "dragonkue/bge-reranker-v2-m3-ko",
+        timeout_sec: float = 10.0,
     ) -> None:
-        self.model = CrossEncoder(model_name)
+        self.model_name = model_name
+        self.timeout_sec = timeout_sec
+        self.model = None
+
+    def _get_model(self):
+        if self.model is None:
+            from sentence_transformers import CrossEncoder
+            self.model = CrossEncoder(self.model_name)
+        return self.model
+
+    def _predict_scores(self, pairs: list[tuple[str, str]]):
+        return self._get_model().predict(pairs)
 
     async def rerank(
         self,
@@ -63,7 +77,23 @@ class KoreanCrossEncoder:
             return []
 
         pairs = [(query, doc.content) for doc in documents]
-        raw_scores = self.model.predict(pairs)
+        try:
+            # CrossEncoder 로딩/추론은 블로킹 작업이므로 이벤트 루프 밖에서 실행한다.
+            raw_scores = await asyncio.wait_for(
+                asyncio.to_thread(self._predict_scores, pairs),
+                timeout=self.timeout_sec,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Reranker timed out after %.1fs. Falling back to initial retrieval ranking.",
+                self.timeout_sec,
+            )
+            return documents[:top_k]
+        except Exception:
+            logger.exception(
+                "Reranker failed. Falling back to initial retrieval ranking.",
+            )
+            return documents[:top_k]
 
         if score_mode == "replace":
             scored_docs = sorted(

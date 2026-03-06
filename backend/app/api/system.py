@@ -47,17 +47,25 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/system/status")
 async def system_status():
-    """DB, ES, OpenAI, Redis 연결 상태."""
-    from app.api.health import check_db, check_elasticsearch, check_openai, check_redis
+    """DB, ES, LLM, Redis 연결 상태."""
+    from app.api.health import (
+        check_db,
+        check_elasticsearch,
+        check_langfuse,
+        check_llm_provider,
+        check_redis,
+    )
 
     components = {
         "database": await check_db(),
         "elasticsearch": await check_elasticsearch(),
-        "openai": await check_openai(),
+        "llm": await check_llm_provider(),
         "redis": await check_redis(),
+        "langfuse": await check_langfuse(),
     }
 
-    all_ok = all(v == "connected" for v in components.values())
+    required = ("database", "elasticsearch", "llm", "redis")
+    all_ok = all(components[name] for name in required)
     return {
         "status": "ok" if all_ok else "degraded",
         "components": components,

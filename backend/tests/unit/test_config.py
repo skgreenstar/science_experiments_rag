@@ -47,8 +47,8 @@ def test_rag_settings_defaults():
     assert rag.chunking_strategy == "auto"
     assert rag.chunk_size == 1024
     assert rag.chunk_overlap == 200
-    assert rag.embedding_provider == "openai"
-    assert rag.embedding_model == "text-embedding-3-small"
+    assert rag.embedding_provider == "ollama"
+    assert rag.embedding_model == "bge-m3"
     assert rag.search_mode == "hybrid"
     assert rag.keyword_engine == "elasticsearch"
     assert rag.rrf_constant == 60
@@ -57,12 +57,12 @@ def test_rag_settings_defaults():
     assert rag.reranker_top_k == 8
     assert rag.retriever_top_k == 20
     assert rag.hyde_enabled is True
-    assert rag.hyde_model == "gpt-4.1-mini"
+    assert rag.hyde_model == "exaone3.5:7.8b"
     assert rag.pii_detection_enabled is True
     assert rag.injection_detection_enabled is True
     assert rag.hallucination_detection_enabled is True
-    assert rag.llm_provider == "openai"
-    assert rag.llm_model == "gpt-4.1-mini"
+    assert rag.llm_provider == "ollama"
+    assert rag.llm_model == "exaone3.5:7.8b"
 
 
 def test_rag_settings_custom_values():
@@ -202,7 +202,7 @@ def test_multi_query_settings_defaults():
     rag = RAGSettings()
     assert rag.multi_query_enabled is True
     assert rag.multi_query_count == 4
-    assert rag.multi_query_model == "gpt-4.1-mini"
+    assert rag.multi_query_model == "exaone3.5:7.8b"
     assert rag.exact_citation_enabled is True
     assert rag.numeric_verification_enabled is True
 
@@ -221,3 +221,33 @@ def test_multi_query_settings_custom():
     assert rag.multi_query_count == 6
     assert rag.exact_citation_enabled is False
     assert rag.numeric_verification_enabled is False
+
+
+def test_apply_env_model_overrides():
+    """환경변수 모델 오버라이드 적용 확인."""
+    from app.config import RAGSettings, Settings, apply_env_model_overrides
+
+    rag = RAGSettings(
+        embedding_provider="openai",
+        embedding_model="text-embedding-3-small",
+        llm_provider="openai",
+        llm_model="gpt-4.1-mini",
+    )
+    env = Settings(
+        rag_embedding_provider="ollama",
+        rag_embedding_model="bge-m3",
+        rag_llm_provider="ollama",
+        rag_llm_model="exaone3.5:7.8b",
+        rag_llm_temperature=0.1,
+    )
+
+    updated = apply_env_model_overrides(rag, env)
+
+    assert updated.embedding_provider == "ollama"
+    assert updated.embedding_model == "bge-m3"
+    assert updated.llm_provider == "ollama"
+    assert updated.llm_model == "exaone3.5:7.8b"
+    assert updated.hyde_model == "exaone3.5:7.8b"
+    assert updated.multi_query_model == "exaone3.5:7.8b"
+    assert updated.contextual_chunking_model == "exaone3.5:7.8b"
+    assert updated.llm_temperature == 0.1

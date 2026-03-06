@@ -36,15 +36,40 @@ class RAGASEvaluator:
     """
 
     def _build_metrics(self):
-        """RAGAS 메트릭을 초기화한다. GPT-4o judge + OpenAI 임베딩."""
-        from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+        """RAGAS 메트릭을 초기화한다. provider/model은 환경변수에서 결정."""
+        env = get_settings()
 
-        evaluator_llm = LangchainLLMWrapper(
-            ChatOpenAI(model="gpt-4o", temperature=0)
-        )
-        evaluator_embeddings = LangchainEmbeddingsWrapper(
-            OpenAIEmbeddings(model="text-embedding-3-small")
-        )
+        if env.ragas_llm_provider == "openai":
+            from langchain_openai import ChatOpenAI
+
+            evaluator_llm = LangchainLLMWrapper(
+                ChatOpenAI(model=env.ragas_llm_model, temperature=0)
+            )
+        elif env.ragas_llm_provider == "ollama":
+            from langchain_ollama import ChatOllama
+
+            evaluator_llm = LangchainLLMWrapper(
+                ChatOllama(model=env.ragas_llm_model, temperature=0)
+            )
+        else:
+            raise ValueError(f"Unsupported RAGAS_LLM_PROVIDER: {env.ragas_llm_provider}")
+
+        if env.ragas_embedding_provider == "openai":
+            from langchain_openai import OpenAIEmbeddings
+
+            evaluator_embeddings = LangchainEmbeddingsWrapper(
+                OpenAIEmbeddings(model=env.ragas_embedding_model)
+            )
+        elif env.ragas_embedding_provider == "ollama":
+            from langchain_ollama import OllamaEmbeddings
+
+            evaluator_embeddings = LangchainEmbeddingsWrapper(
+                OllamaEmbeddings(model=env.ragas_embedding_model, base_url=env.ollama_url)
+            )
+        else:
+            raise ValueError(
+                f"Unsupported RAGAS_EMBEDDING_PROVIDER: {env.ragas_embedding_provider}"
+            )
 
         return [
             Faithfulness(llm=evaluator_llm),

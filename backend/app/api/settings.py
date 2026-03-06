@@ -37,7 +37,7 @@ async def patch_settings(
 @router.get("/settings/models")
 async def get_available_models():
     env = get_env_settings()
-    models = {"openai": [], "embedding": []}
+    models = {"openai": [], "anthropic": [], "ollama": [], "embedding": []}
 
     # OpenAI 모델
     if env.openai_api_key:
@@ -48,9 +48,28 @@ async def get_available_models():
             "gpt-4o",
             "gpt-4o-mini",
         ]
-        models["embedding"] = [
+        models["embedding"].extend([
             "text-embedding-3-small",
             "text-embedding-3-large",
+        ])
+
+    if env.anthropic_api_key:
+        models["anthropic"] = [
+            "claude-sonnet-4-20250514",
         ]
+
+    models["ollama"] = [
+        "exaone3.5:7.8b",
+        "qwen2.5:7b",
+    ]
+    models["embedding"].extend([
+        "bge-m3",
+    ])
+
+    # env에 지정된 모델을 후보 목록 맨 앞에 추가
+    if env.rag_llm_provider == "ollama" and env.rag_llm_model:
+        models["ollama"] = [env.rag_llm_model] + [m for m in models["ollama"] if m != env.rag_llm_model]
+    if env.rag_embedding_provider == "ollama" and env.rag_embedding_model:
+        models["embedding"] = [env.rag_embedding_model] + [m for m in models["embedding"] if m != env.rag_embedding_model]
 
     return models

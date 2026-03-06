@@ -36,16 +36,24 @@ function TraceDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
-        <DialogHeader>
+      <DialogContent className="!left-4 !right-4 !top-4 !w-auto !max-w-none !translate-x-0 !translate-y-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:!left-1/2 sm:!right-auto sm:!top-1/2 sm:!w-full sm:!max-w-2xl sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:max-h-[85vh]">
+        <DialogHeader className="shrink-0 px-6 pt-6">
           <DialogTitle>트레이스 상세</DialogTitle>
         </DialogHeader>
         {trace ? (
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
+              <div className="flex items-start justify-between gap-3">
                 <span className="text-muted-foreground">쿼리</span>
-                <span className="font-medium">{trace.query}</span>
+                <span className="max-w-[70%] break-all text-right font-medium">
+                  {trace.query || "-"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-muted-foreground">출력</span>
+                <span className="max-w-[70%] break-all text-right font-medium">
+                  {trace.output || "-"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">총 소요시간</span>
@@ -66,16 +74,16 @@ function TraceDetailDialog({
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {trace.spans?.map((span, i) => {
+                  {trace.spans?.length ? trace.spans.map((span, i) => {
                     const widthPercent =
                       trace.total_duration_ms > 0
-                        ? Math.max(5, (span.duration_ms / trace.total_duration_ms) * 100)
+                        ? Math.min(100, Math.max(5, (span.duration_ms / trace.total_duration_ms) * 100))
                         : 100;
                     return (
                       <div key={i} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-medium">{span.name}</span>
-                          <span className="text-muted-foreground">{span.duration_ms}ms</span>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="truncate font-medium">{span.name}</span>
+                          <span className="shrink-0 text-muted-foreground">{span.duration_ms}ms</span>
                         </div>
                         <div className="h-2 rounded-full bg-muted">
                           <div
@@ -85,7 +93,7 @@ function TraceDetailDialog({
                         </div>
                       </div>
                     );
-                  }) ?? (
+                  }) : (
                     <p className="text-xs text-muted-foreground">스팬 정보가 없습니다.</p>
                   )}
                 </div>
@@ -93,7 +101,7 @@ function TraceDetailDialog({
             </Card>
           </div>
         ) : (
-          <p className="text-muted-foreground">로딩 중...</p>
+          <p className="px-6 pb-6 text-muted-foreground">로딩 중...</p>
         )}
       </DialogContent>
     </Dialog>
@@ -122,6 +130,7 @@ export default function TracesPage() {
             <TableRow>
               <TableHead>시간</TableHead>
               <TableHead>쿼리</TableHead>
+              <TableHead>출력</TableHead>
               <TableHead className="text-right">소요시간</TableHead>
               <TableHead className="text-right">상태</TableHead>
               <TableHead className="text-right">작업</TableHead>
@@ -130,13 +139,13 @@ export default function TracesPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   로딩 중...
                 </TableCell>
               </TableRow>
             ) : !data?.items?.length ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   트레이스가 없습니다.
                 </TableCell>
               </TableRow>
@@ -148,6 +157,9 @@ export default function TracesPage() {
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate text-sm">
                     {trace.query}
+                  </TableCell>
+                  <TableCell className="max-w-[360px] truncate text-sm text-muted-foreground">
+                    {trace.output || "-"}
                   </TableCell>
                   <TableCell className="text-right text-sm">
                     {(trace.total_duration_ms / 1000).toFixed(2)}s

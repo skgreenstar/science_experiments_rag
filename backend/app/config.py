@@ -19,6 +19,20 @@ class Settings(BaseSettings):
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str = "http://localhost:3100"
+    rag_embedding_provider: str | None = "ollama"
+    rag_embedding_model: str | None = "bge-m3"
+    rag_embedding_dimensions: int = 1024
+    rag_llm_provider: str | None = "ollama"
+    rag_llm_model: str | None = "exaone3.5:7.8b"
+    rag_llm_temperature: float | None = 0.3
+    rag_hyde_model: str | None = None
+    rag_multi_query_model: str | None = None
+    rag_contextual_chunking_model: str | None = None
+    ragas_llm_provider: str = "ollama"
+    ragas_llm_model: str = "exaone3.5:7.8b"
+    ragas_embedding_provider: str = "ollama"
+    ragas_embedding_model: str = "bge-m3"
+    upload_max_mb: int = 200
 
 
 class PIIDetectionSettings(BaseModel):
@@ -85,8 +99,8 @@ class RAGSettings(BaseModel):
     contextual_chunking_max_doc_chars: int = 2000
 
     # 임베딩
-    embedding_provider: str = "openai"
-    embedding_model: str = "text-embedding-3-small"
+    embedding_provider: str = "ollama"
+    embedding_model: str = "bge-m3"
 
     # 검색
     search_mode: str = "hybrid"
@@ -105,7 +119,7 @@ class RAGSettings(BaseModel):
 
     # HyDE
     hyde_enabled: bool = True
-    hyde_model: str = "gpt-4.1-mini"
+    hyde_model: str = "exaone3.5:7.8b"
 
     # Cascading + Query Expansion
     cascading_bm25_threshold: float = 3.0
@@ -123,7 +137,7 @@ class RAGSettings(BaseModel):
     # 멀티쿼리
     multi_query_enabled: bool = True
     multi_query_count: int = 4
-    multi_query_model: str = "gpt-4.1-mini"
+    multi_query_model: str = "exaone3.5:7.8b"
 
     # 정확 인용 모드
     exact_citation_enabled: bool = True
@@ -163,8 +177,8 @@ class RAGSettings(BaseModel):
                 object.__setattr__(self, flat, sub.enabled)
 
     # 답변 생성
-    llm_provider: str = "openai"
-    llm_model: str = "gpt-4.1-mini"
+    llm_provider: str = "ollama"
+    llm_model: str = "exaone3.5:7.8b"
     llm_temperature: float = 0.3
     system_prompt: str = ""  # 비어있으면 prompts.py의 SYSTEM_PROMPT 사용
 
@@ -172,3 +186,30 @@ class RAGSettings(BaseModel):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def apply_env_model_overrides(rag: RAGSettings, env: Settings | None = None) -> RAGSettings:
+    """환경변수로 모델/프로바이더를 강제 오버라이드한다."""
+    env = env or get_settings()
+    updates: dict = {}
+
+    if env.rag_embedding_provider:
+        updates["embedding_provider"] = env.rag_embedding_provider
+    if env.rag_embedding_model:
+        updates["embedding_model"] = env.rag_embedding_model
+
+    if env.rag_llm_provider:
+        updates["llm_provider"] = env.rag_llm_provider
+    if env.rag_llm_model:
+        updates["llm_model"] = env.rag_llm_model
+        updates["hyde_model"] = env.rag_hyde_model or env.rag_llm_model
+        updates["multi_query_model"] = env.rag_multi_query_model or env.rag_llm_model
+        updates["contextual_chunking_model"] = (
+            env.rag_contextual_chunking_model or env.rag_llm_model
+        )
+    if env.rag_llm_temperature is not None:
+        updates["llm_temperature"] = env.rag_llm_temperature
+
+    if not updates:
+        return rag
+    return rag.model_copy(update=updates)

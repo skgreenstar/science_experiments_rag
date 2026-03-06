@@ -44,16 +44,16 @@ async def res_client(res_db):
     app.dependency_overrides.clear()
 
 
-class TestOpenAIUnavailable:
-    """OpenAI 서비스 미응답 시나리오."""
+class TestLLMUnavailable:
+    """LLM 서비스 미응답 시나리오."""
 
     @pytest.mark.asyncio
-    async def test_health_reports_openai_disconnected(self, res_client, res_db):
-        """OpenAI 미응답 시 헬스체크에서 disconnected 보고."""
-        with patch("app.api.health.check_openai", return_value=False):
+    async def test_health_reports_llm_disconnected(self, res_client, res_db):
+        """LLM 미응답 시 헬스체크에서 disconnected 보고."""
+        with patch("app.api.health.check_llm_provider", return_value=False):
             resp = await res_client.get("/api/health")
             assert resp.status_code == 200
-            assert resp.json()["components"]["openai"] == "disconnected"
+            assert resp.json()["components"]["llm"] == "disconnected"
 
     @pytest.mark.asyncio
     async def test_models_endpoint_graceful(self, res_client, res_db):
@@ -73,17 +73,17 @@ class TestPartialFailure:
 
     @pytest.mark.asyncio
     async def test_health_partial_failure(self, res_client, res_db):
-        """ES+OpenAI 미응답, DB만 연결 시 응답."""
+        """ES+LLM 미응답, DB만 연결 시 응답."""
         with (
             patch("app.api.health.check_elasticsearch", return_value=False),
-            patch("app.api.health.check_openai", return_value=False),
+            patch("app.api.health.check_llm_provider", return_value=False),
             patch("app.api.health.check_redis", return_value=False),
         ):
             resp = await res_client.get("/api/health")
             assert resp.status_code == 200
             data = resp.json()
             assert data["components"]["elasticsearch"] == "disconnected"
-            assert data["components"]["openai"] == "disconnected"
+            assert data["components"]["llm"] == "disconnected"
             assert data["components"]["redis"] == "disconnected"
 
     @pytest.mark.asyncio
@@ -92,7 +92,7 @@ class TestPartialFailure:
         with (
             patch("app.api.health.check_db", return_value=True),
             patch("app.api.health.check_elasticsearch", return_value=True),
-            patch("app.api.health.check_openai", return_value=True),
+            patch("app.api.health.check_llm_provider", return_value=True),
             patch("app.api.health.check_redis", return_value=True),
         ):
             resp = await res_client.get("/api/health")

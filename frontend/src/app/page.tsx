@@ -31,6 +31,13 @@ export default function DashboardPage() {
       precision: +((r.metrics?.context_precision ?? 0) * 100).toFixed(1),
       recall: +((r.metrics?.context_recall ?? 0) * 100).toFixed(1),
     }));
+  const componentLabelMap: Record<string, string> = {
+    database: "database",
+    elasticsearch: "elasticsearch",
+    llm: "LLM 모델",
+    redis: "redis",
+    langfuse: "Langfuse",
+  };
 
   return (
     <div className="space-y-6">
@@ -139,7 +146,7 @@ export default function DashboardPage() {
             {systemStatus?.components ? (
               Object.entries(systemStatus.components).map(([name, connected]) => (
                 <div key={name} className="flex items-center justify-between">
-                  <span className="text-muted-foreground">{name}</span>
+                  <span className="text-muted-foreground">{componentLabelMap[name] ?? name}</span>
                   <Badge
                     variant={connected ? "default" : "destructive"}
                   >

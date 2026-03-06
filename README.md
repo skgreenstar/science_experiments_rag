@@ -1,8 +1,8 @@
-# UrstoryRAG - 한국어 RAG 프로덕션 시스템
+# RAG - 한국어 RAG 프로덕션 시스템
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB.svg)](https://www.python.org/)
-[![Next.js 15](https://img.shields.io/badge/Next.js-15-000000.svg)](https://nextjs.org/)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-000000.svg)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Haystack 2.x](https://img.shields.io/badge/Haystack-2.x-1DB954.svg)](https://haystack.deepset.ai/)
 
@@ -10,9 +10,9 @@
 
 ## 소개
 
-UrstoryRAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augmented Generation) 시스템**이다.
+RAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augmented Generation) 시스템**이다.
 
-일반적인 RAG 프로젝트와 달리, UrstoryRAG는 다음을 처음부터 모두 포함한다:
+일반적인 RAG 프로젝트와 달리, RAG는 다음을 처음부터 모두 포함한다:
 
 - **한국어 형태소 분석 기반 하이브리드 검색**: PGVector 벡터 검색과 Elasticsearch+Nori 키워드 검색을 결합하여 한국어 문서에서 높은 검색 정확도를 달성한다.
 - **한국어 특화 리랭커**: 영어 중심 리랭커 대신 한국어 AutoRAG 벤치마크 F1=0.9123 1위인 `bge-reranker-v2-m3-ko`를 사용한다.
@@ -36,7 +36,7 @@ UrstoryRAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augm
 | **Contextual Chunking** | LLM 기반 문맥 인식 청킹으로 의미 단위 분할 |
 | **RAGAS 자동 품질 평가** | Faithfulness, Relevancy, Context Precision 등 자동 측정 |
 | **Langfuse 모니터링** | v3 풀 스택 (Web + Worker + ClickHouse + Redis + MinIO) 통합 |
-| **관리자 UI** | Next.js 15 + React 19 + shadcn/ui 기반 대시보드 |
+| **관리자 UI** | Next.js 16 + React 19 + shadcn/ui 기반 대시보드 |
 | **문서 자동 감시** | Watchdog 기반 파일 변경 감지 및 자동 인덱싱 |
 
 ---
@@ -46,7 +46,7 @@ UrstoryRAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augm
 ```
                         +------------------+
                         |   관리자 UI      |
-                        |  (Next.js 15)    |
+                        |  (Next.js 16)    |
                         |  localhost:3500   |
                         +--------+---------+
                                  |
@@ -70,12 +70,18 @@ UrstoryRAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augm
               +------------------+------------------+
               |                  |                  |
               v                  v                  v
-     +--------+------+  +-------+-------+  +-------+-------+
-     | OpenAI API    |  | 한국어 리랭커  |  | Langfuse v3   |
-     | - 임베딩      |  | bge-reranker  |  | (모니터링)    |
-     | - LLM 생성    |  | -v2-m3-ko     |  | localhost:3100|
-     | - 평가 Judge  |  +---------------+  +---------------+
-     +---------------+
+     +----------------+  +-------+-------+  +-------+-------+
+     | Ollama         |  | 한국어 리랭커  |  | Langfuse v3   |
+     | - bge-m3       |  | bge-reranker  |  | (모니터링)    |
+     | - exaone3.5:7.8b| | -v2-m3-ko     |  | localhost:3100|
+     +--------+-------+  +---------------+  +---------------+
+              |
+              | (선택)
+              v
+        +-------------+
+        | OpenAI API  |
+        | (옵션)      |
+        +-------------+
 ```
 
 ---
@@ -86,13 +92,14 @@ UrstoryRAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augm
 |------|------|------|
 | **백엔드 프레임워크** | FastAPI | 0.115+ |
 | **RAG 프레임워크** | Haystack | 2.9+ |
-| **프론트엔드** | Next.js + React + shadcn/ui | 15 / 19 |
+| **프론트엔드** | Next.js + React + shadcn/ui | 16 / 19 |
 | **벡터 DB** | PostgreSQL + PGVector | PG 17 |
 | **키워드 검색** | Elasticsearch + Nori | 8.x |
 | **작업 큐** | Celery + Redis | 5.4+ / 7 |
-| **임베딩** | OpenAI text-embedding-3-small | 1536차원 |
-| **LLM** | OpenAI gpt-4.1-mini | -- |
-| **평가 Judge** | OpenAI gpt-4o | -- |
+| **임베딩 (기본)** | Ollama bge-m3 | 1024차원 |
+| **LLM (기본)** | Ollama exaone3.5:7.8b | -- |
+| **평가 Judge (기본)** | Ollama exaone3.5:7.8b | -- |
+| **클라우드 옵션** | OpenAI (선택) | -- |
 | **리랭커** | dragonkue/bge-reranker-v2-m3-ko | -- |
 | **NLP** | kiwipiepy (한국어 형태소 분석) | 0.18+ |
 | **모니터링** | Langfuse v3 | 3.x |
@@ -108,7 +115,7 @@ UrstoryRAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augm
 - Docker / Docker Compose
 - Python 3.12+
 - Node.js 20+ / pnpm
-- OpenAI API Key
+- Ollama (기본 모델: `bge-m3`, `exaone3.5:7.8b`)
 
 ### Step 1: 프로젝트 클론
 
@@ -126,7 +133,20 @@ cp .env.example .env
 `.env` 파일을 열고 다음 값을 설정한다:
 
 ```dotenv
-# 필수: OpenAI API 키
+# 기본: Ollama 모델 설정
+RAG_EMBEDDING_PROVIDER=ollama
+RAG_EMBEDDING_MODEL=bge-m3
+RAG_EMBEDDING_DIMENSIONS=1024
+RAG_LLM_PROVIDER=ollama
+RAG_LLM_MODEL=exaone3.5:7.8b
+
+# 선택: RAGAS 평가 모델
+RAGAS_LLM_PROVIDER=ollama
+RAGAS_LLM_MODEL=exaone3.5:7.8b
+RAGAS_EMBEDDING_PROVIDER=ollama
+RAGAS_EMBEDDING_MODEL=bge-m3
+
+# 선택: OpenAI 사용 시
 OPENAI_API_KEY=sk-your-openai-api-key
 
 # 필수: PostgreSQL 비밀번호 (원하는 값으로 변경)
@@ -134,6 +154,20 @@ POSTGRES_PASSWORD=changeme_strong_password
 
 # 선택: Langfuse 암호화 키 (64자 hex, 프로덕션에서는 반드시 변경)
 LANGFUSE_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+
+# Langfuse 연동 (선택)
+# docker compose 실행 시 반드시 컨테이너 주소 사용
+LANGFUSE_HOST=http://langfuse-web:3000
+# Langfuse UI에서 발급 후 입력
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+```
+
+로컬 Ollama 모델 준비:
+
+```bash
+ollama pull bge-m3
+ollama pull exaone3.5:7.8b
 ```
 
 ### Step 3: 공유 인프라 실행
@@ -199,6 +233,15 @@ pnpm dev
 docker compose up -d langfuse-web langfuse-worker rag-clickhouse langfuse-redis langfuse-minio
 ```
 
+트레이스가 비어 있으면 아래를 확인한다.
+
+1. `http://localhost:3100` 접속 후 로그인
+2. 프로젝트 생성
+3. 프로젝트의 API Keys에서 `Public Key`, `Secret Key` 발급
+4. 루트 `.env`의 `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`에 입력
+5. `LANGFUSE_HOST=http://langfuse-web:3000` 확인 (docker compose 기준)
+6. `docker compose up -d rag-api rag-worker`로 백엔드 재시작
+
 ### Step 7: 접속 확인
 
 | 서비스 | URL |
@@ -221,7 +264,7 @@ urstory-rag/
 │   │   ├── services/           # 비즈니스 로직
 │   │   │   ├── chunking/       #   LLM 기반 Contextual Chunking
 │   │   │   ├── document/       #   문서 파싱 (PDF, DOCX, MD)
-│   │   │   ├── embedding/      #   OpenAI 임베딩
+│   │   │   ├── embedding/      #   Ollama/OpenAI 임베딩
 │   │   │   ├── evaluation/     #   RAGAS 평가
 │   │   │   ├── generation/     #   LLM 답변 생성
 │   │   │   ├── guardrails/     #   가드레일 (PII, 인젝션, 할루시네이션)
@@ -295,7 +338,7 @@ cd backend
 
 | 평가 방법 | 역할 | 설명 |
 |-----------|------|------|
-| LLM-as-Judge (GPT-4o) | 메인 지표 | 의미적 정확도를 0~100점으로 판정 |
+| LLM-as-Judge (환경변수 모델) | 메인 지표 | 의미적 정확도를 0~100점으로 판정 |
 | 키워드 재현율 | 보조 지표 | 숫자/고유명사 exact match |
 
 ### 참고: 개발 중 달성한 품질

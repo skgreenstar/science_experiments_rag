@@ -16,7 +16,7 @@ async def main():
     from app.services.document.processor import DocumentProcessor
     from app.services.document.stores.pgvector_store import PgVectorStore
     from app.services.document.stores.elasticsearch_store import ElasticsearchStore
-    from app.services.embedding.openai import OpenAIEmbedding
+    from app.services.providers import build_embedding_provider, build_llm_provider
     from app.services.settings import SettingsService
 
     settings = get_settings()
@@ -45,16 +45,17 @@ async def main():
         settings_service._db = session
         rag_settings = await settings_service.get_settings()
 
-    embedding = OpenAIEmbedding(api_key=settings.openai_api_key, model=rag_settings.embedding_model, dimensions=1536)
+    embedding = build_embedding_provider(settings, rag_settings)
     converter = DocumentConverter()
 
     # Contextual Chunking LLM 프로바이더 (조건부 생성)
     chunk_llm = None
     if rag_settings.contextual_chunking_enabled:
-        from app.services.generation.openai import OpenAILLM
-        chunk_llm = OpenAILLM(
-            api_key=settings.openai_api_key,
+        chunk_llm = build_llm_provider(
+            settings,
+            rag_settings,
             model=rag_settings.contextual_chunking_model,
+            temperature=rag_settings.llm_temperature,
         )
         print(f"Contextual Chunking: ON (model={rag_settings.contextual_chunking_model})")
     else:

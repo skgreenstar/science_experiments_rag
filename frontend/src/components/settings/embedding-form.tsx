@@ -32,8 +32,8 @@ export function EmbeddingForm() {
   const form = useForm<EmbeddingFormData>({
     resolver: zodResolver(embeddingSchema),
     values: {
-      provider: settings?.embedding_provider ?? "openai",
-      model: settings?.embedding_model ?? "text-embedding-3-small",
+      provider: settings?.embedding_provider ?? "ollama",
+      model: settings?.embedding_model ?? "bge-m3",
     },
   });
 

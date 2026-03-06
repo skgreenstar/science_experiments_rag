@@ -255,6 +255,13 @@ class HybridSearchOrchestrator:
                     # soft_fail: 근거 추출을 시도하여 답변 가능 여부 판정
                     gate_soft_failed = True
                 else:
+                    if self.langfuse and lf_trace:
+                        self.langfuse.end_trace(
+                            lf_trace,
+                            name="rag-search",
+                            input={"query": query},
+                            output=gate_settings.not_found_message,
+                        )
                     return SearchPipelineResult(
                         documents=documents,
                         answer=gate_settings.not_found_message,
@@ -314,6 +321,13 @@ class HybridSearchOrchestrator:
                     # 근거 없음 → 최종 차단
                     gate_settings = settings.guardrails.retrieval_gate
                     self._lf_end(lf_gen, None)
+                    if self.langfuse and lf_trace:
+                        self.langfuse.end_trace(
+                            lf_trace,
+                            name="rag-search",
+                            input={"query": query},
+                            output=gate_settings.not_found_message,
+                        )
                     return SearchPipelineResult(
                         documents=documents,
                         answer=gate_settings.not_found_message,
@@ -446,8 +460,9 @@ class HybridSearchOrchestrator:
             ))
             self._lf_end(lf_span, {"grounded_ratio": hal_result.grounded_ratio})
             if hal_result.grounded_ratio is not None and lf_trace:
+                lf_trace_id = getattr(lf_trace, "trace_id", None) or getattr(lf_trace, "id", "")
                 self.langfuse.score(
-                    getattr(lf_trace, "id", ""), "hallucination", hal_result.grounded_ratio,
+                    lf_trace_id, "hallucination", hal_result.grounded_ratio,
                 )
             if not passed:
                 answer = self.hallucination_detector.handle_result(
@@ -455,8 +470,13 @@ class HybridSearchOrchestrator:
                 )
 
         # 트레이스 완료
-        if lf_trace:
-            lf_trace.update(output=answer)
+        if self.langfuse and lf_trace:
+            self.langfuse.end_trace(
+                lf_trace,
+                name="rag-search",
+                input={"query": query},
+                output=answer,
+            )
 
         return SearchPipelineResult(
             documents=documents,
@@ -481,7 +501,15 @@ class HybridSearchOrchestrator:
     @staticmethod
     def _lf_end(obj, output=None):
         if obj is not None:
-            obj.end(output=output)
+            if output is not None and hasattr(obj, "update"):
+                try:
+                    obj.update(output=output)
+                except Exception:
+                    pass
+            try:
+                obj.end()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # 내부 검색 메서드

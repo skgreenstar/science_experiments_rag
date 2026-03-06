@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test";
 
 test.describe("모바일 뷰포트", () => {
   test.use({ viewport: { width: 375, height: 812 } });
+  test.beforeEach(async ({}, testInfo) => {
+    test.skip(testInfo.project.name !== "Mobile", "Mobile project only");
+  });
 
   test("사이드바 숨겨짐 확인", async ({ page }) => {
     await page.goto("/");
@@ -15,39 +18,32 @@ test.describe("모바일 뷰포트", () => {
   test("햄버거 메뉴로 사이드바 열기", async ({ page }) => {
     await page.goto("/");
 
-    // 햄버거 메뉴 버튼 (md:hidden인 Menu 아이콘 버튼)
-    const menuButton = page.locator("button").filter({
-      has: page.locator("svg"),
-    }).first();
-
-    await menuButton.click();
+    await page.getByTestId("mobile-menu-button").click();
+    const mobileSidebar = page.getByTestId("mobile-sidebar");
 
     // Sheet로 열린 사이드바에서 네비게이션 확인
-    await expect(page.getByText("UrstoryRAG")).toBeVisible();
-    await expect(page.getByText("문서 관리")).toBeVisible();
+    await expect(mobileSidebar.getByText("RAG")).toBeVisible();
+    await expect(mobileSidebar.getByText("문서 관리")).toBeVisible();
   });
 
   test("모바일 네비게이션 이동", async ({ page }) => {
     await page.goto("/");
 
-    // 햄버거 메뉴 열기
-    const menuButton = page.locator("button").filter({
-      has: page.locator("svg"),
-    }).first();
-    await menuButton.click();
+    await page.getByTestId("mobile-menu-button").click();
+    const mobileSidebar = page.getByTestId("mobile-sidebar");
 
     // 문서 관리 클릭
-    await page.getByText("문서 관리").click();
+    await mobileSidebar.getByRole("link", { name: "문서 관리" }).click();
 
     // 페이지 이동 확인
-    await page.waitForURL("/documents");
+    await page.waitForURL("**/documents");
   });
 
   test("모바일 대시보드 카드 레이아웃", async ({ page }) => {
     await page.goto("/");
 
     // 대시보드 타이틀
-    await expect(page.getByText("대시보드")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "대시보드" })).toBeVisible();
 
     // 통계 카드 표시 확인 (세로 배치)
     await expect(page.getByText("총 문서")).toBeVisible();
@@ -58,7 +54,7 @@ test.describe("모바일 뷰포트", () => {
     await page.goto("/documents");
 
     // 페이지 타이틀
-    await expect(page.getByText("문서 관리")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "문서 관리" })).toBeVisible();
 
     // 업로드 버튼
     await expect(
@@ -83,6 +79,9 @@ test.describe("모바일 뷰포트", () => {
 
 test.describe("PC 뷰포트", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
+  test.beforeEach(async ({}, testInfo) => {
+    test.skip(testInfo.project.name !== "Desktop", "Desktop project only");
+  });
 
   test("사이드바 항상 표시", async ({ page }) => {
     await page.goto("/");
@@ -95,12 +94,13 @@ test.describe("PC 뷰포트", () => {
   test("사이드바 네비게이션 항목 표시", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByText("대시보드")).toBeVisible();
-    await expect(page.getByText("문서 관리")).toBeVisible();
-    await expect(page.getByText("검색 테스트")).toBeVisible();
-    await expect(page.getByText("설정")).toBeVisible();
-    await expect(page.getByText("평가")).toBeVisible();
-    await expect(page.getByText("모니터링")).toBeVisible();
+    const desktopSidebar = page.locator("[data-testid='sidebar']");
+    await expect(desktopSidebar.getByRole("link", { name: "대시보드" })).toBeVisible();
+    await expect(desktopSidebar.getByRole("link", { name: "문서 관리" })).toBeVisible();
+    await expect(desktopSidebar.getByRole("link", { name: "검색 테스트" })).toBeVisible();
+    await expect(desktopSidebar.getByRole("link", { name: "설정" })).toBeVisible();
+    await expect(desktopSidebar.getByRole("link", { name: "평가" })).toBeVisible();
+    await expect(desktopSidebar.getByRole("link", { name: "모니터링" })).toBeVisible();
   });
 
   test("PC 대시보드 그리드 레이아웃", async ({ page }) => {
@@ -124,8 +124,8 @@ test.describe("PC 뷰포트", () => {
     await page.goto("/");
 
     // 사이드바에서 검색 테스트 클릭
-    await page.getByText("검색 테스트").click();
-    await page.waitForURL("/search");
+    await page.locator("[data-testid='sidebar']").getByRole("link", { name: "검색 테스트" }).click();
+    await page.waitForURL("**/search");
 
     // 검색 페이지 확인
     await expect(
