@@ -1,0 +1,96 @@
+[project]
+name = "urstory-rag"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "Korean RAG Production System"
+authors = [{name = "김성박", email = "urstory@fullstackfamily.com"}]
+license = {text = "MIT"}
+readme = "../README.md"
+repository = "https://github.com/urstory/urstory-rag"
+keywords = ["rag", "korean", "nlp", "haystack", "fastapi", "elasticsearch", "nori"]
+
+dependencies = [
+    # 웹
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "python-multipart>=0.0.18",
+
+    # RAG 프레임워크
+    "haystack-ai>=2.9",
+
+    # DB
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pgvector>=0.3",
+
+    # 작업 큐
+    "celery[redis]>=5.4",
+
+    # ML/NLP
+    "transformers>=4.47",
+    "sentence-transformers>=3.3",
+    "torch>=2.5",
+    "kiwipiepy>=0.18",
+    "rank-bm25>=0.2",
+
+    # LLM 클라이언트
+    "openai>=1.58",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+
+    # RAGAS
+    "langchain-openai>=0.3",
+    "ragas>=0.2",
+
+    # 모니터링
+    "langfuse>=2.55",
+
+    # NLP
+    "nltk>=3.9.1",
+
+    # 문서 변환
+    "pypdf>=6.0",
+    "python-docx>=1.1",
+    "markdown-it-py>=3.0",
+    "mdit_plain>=1.0",
+
+    # 디렉토리 감시
+    "watchdog>=6.0",
+
+    # 유틸리티
+    "pydantic-settings>=2.7",
+    "python-dotenv>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/urstory/urstory-rag"
+Repository = "https://github.com/urstory/urstory-rag"
+Issues = "https://github.com/urstory/urstory-rag/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+markers = [
+    "performance: 성능 테스트 (별도 실행: pytest -m performance)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
