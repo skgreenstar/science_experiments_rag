@@ -25,6 +25,7 @@ class PgVectorStore:
 
         async with self.session_factory() as session:
             for chunk, embedding in zip(chunks, embeddings):
+                chunk_id = (chunk.metadata or {}).get("_chunk_id") or str(uuid.uuid4())
                 embedding_str = f"[{','.join(str(v) for v in embedding)}]"
                 await session.execute(
                     text(
@@ -34,7 +35,7 @@ class PgVectorStore:
                         "CAST(:meta AS jsonb), CAST(:emb AS vector))"
                     ),
                     {
-                        "id": str(uuid.uuid4()),
+                        "id": str(chunk_id),
                         "doc_id": doc_id,
                         "content": chunk.content,
                         "idx": chunk.chunk_index,

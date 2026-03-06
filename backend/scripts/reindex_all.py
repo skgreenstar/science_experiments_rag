@@ -16,6 +16,9 @@ async def main():
     from app.services.document.processor import DocumentProcessor
     from app.services.document.stores.pgvector_store import PgVectorStore
     from app.services.document.stores.elasticsearch_store import ElasticsearchStore
+    from app.services.graph.extractor import GraphExtractor
+    from app.services.graph.indexer import GraphIndexer
+    from app.services.graph.neo4j_client import Neo4jClient
     from app.services.providers import build_embedding_provider, build_llm_provider
     from app.services.settings import SettingsService
 
@@ -66,7 +69,28 @@ async def main():
 
         pg_store = PgVectorStore(session_factory=session_factory)
         es_store = ElasticsearchStore(es_url=settings.elasticsearch_url)
-        indexer = DocumentIndexer(embedding, pg_store, es_store)
+        graph_indexer = None
+        graph_client = None
+        if settings.neo4j_enabled and rag_settings.graph_enabled:
+            graph_llm = None
+            try:
+                graph_llm = build_llm_provider(
+                    settings,
+                    rag_settings,
+                    model=rag_settings.llm_model,
+                    temperature=rag_settings.llm_temperature,
+                )
+            except Exception as exc:
+                print(f"  Graph LLM init failed, fallback extractor used: {exc}")
+            graph_client = Neo4jClient(
+                uri=settings.neo4j_uri,
+                user=settings.neo4j_user,
+                password=settings.neo4j_password,
+                enabled=True,
+            )
+            graph_indexer = GraphIndexer(graph_client, GraphExtractor(llm=graph_llm))
+
+        indexer = DocumentIndexer(embedding, pg_store, es_store, graph_indexer=graph_indexer)
 
         async with session_factory() as session:
             processor = DocumentProcessor(
@@ -84,6 +108,9 @@ async def main():
                 print(f"  OK")
             except Exception as e:
                 print(f"  ERROR: {e}")
+            finally:
+                if graph_client is not None:
+                    await graph_client.close()
 
     # ES 최종 상태
     async with httpx.AsyncClient() as client:

@@ -93,6 +93,9 @@ class SettingsResponse(BaseModel):
     rrf_constant: int
     vector_weight: float
     keyword_weight: float
+    graph_enabled: bool
+    graph_weight: float
+    graph_top_k: int
     reranking_enabled: bool
     reranker_model: str
     reranker_top_k: int
@@ -136,6 +139,9 @@ class SettingsUpdateRequest(BaseModel):
     rrf_constant: int | None = None
     vector_weight: float | None = None
     keyword_weight: float | None = None
+    graph_enabled: bool | None = None
+    graph_weight: float | None = None
+    graph_top_k: int | None = None
     reranking_enabled: bool | None = None
     reranker_model: str | None = None
     reranker_top_k: int | None = None

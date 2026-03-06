@@ -21,11 +21,14 @@ import { toast } from "sonner";
 import { Save } from "lucide-react";
 
 const searchSchema = z.object({
-  mode: z.enum(["hybrid", "vector", "keyword", "cascading"]),
+  mode: z.enum(["auto", "hybrid", "vector", "vector_only", "keyword", "keyword_only", "graph", "graph_only", "cascading"]),
   keyword_engine: z.string(),
   rrf_constant: z.number().min(1).max(200),
   vector_weight: z.number().min(0).max(1),
   keyword_weight: z.number().min(0).max(1),
+  graph_enabled: z.boolean(),
+  graph_weight: z.number().min(0).max(1),
+  graph_top_k: z.number().min(1).max(100),
   cascading_bm25_threshold: z.number().min(0.5).max(20),
   cascading_min_qualifying_docs: z.number().min(1).max(10),
   cascading_min_doc_score: z.number().min(0.1).max(10),
@@ -51,6 +54,9 @@ export function SearchForm() {
       rrf_constant: settings?.rrf_constant ?? 60,
       vector_weight: settings?.vector_weight ?? 0.5,
       keyword_weight: settings?.keyword_weight ?? 0.5,
+      graph_enabled: settings?.graph_enabled ?? false,
+      graph_weight: settings?.graph_weight ?? 0.2,
+      graph_top_k: settings?.graph_top_k ?? 20,
       cascading_bm25_threshold: settings?.cascading_bm25_threshold ?? 3.0,
       cascading_min_qualifying_docs: settings?.cascading_min_qualifying_docs ?? 3,
       cascading_min_doc_score: settings?.cascading_min_doc_score ?? 1.0,
@@ -71,6 +77,9 @@ export function SearchForm() {
         rrf_constant: data.rrf_constant,
         vector_weight: data.vector_weight,
         keyword_weight: data.keyword_weight,
+        graph_enabled: data.graph_enabled,
+        graph_weight: data.graph_weight,
+        graph_top_k: data.graph_top_k,
         cascading_bm25_threshold: data.cascading_bm25_threshold,
         cascading_min_qualifying_docs: data.cascading_min_qualifying_docs,
         cascading_min_doc_score: data.cascading_min_doc_score,
@@ -103,6 +112,9 @@ export function SearchForm() {
   const queryExpansionMaxKeywords = form.watch("query_expansion_max_keywords");
   const multiQueryEnabled = form.watch("multi_query_enabled");
   const multiQueryCount = form.watch("multi_query_count");
+  const graphEnabled = form.watch("graph_enabled");
+  const graphWeight = form.watch("graph_weight");
+  const graphTopK = form.watch("graph_top_k");
 
   return (
     <Card>
@@ -121,10 +133,15 @@ export function SearchForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="auto">자동 (AUTO)</SelectItem>
                 <SelectItem value="cascading">캐스케이딩 (BM25 우선)</SelectItem>
                 <SelectItem value="hybrid">하이브리드 (RRF)</SelectItem>
-                <SelectItem value="vector">벡터</SelectItem>
-                <SelectItem value="keyword">키워드</SelectItem>
+                <SelectItem value="vector_only">벡터 전용</SelectItem>
+                <SelectItem value="keyword_only">키워드 전용</SelectItem>
+                <SelectItem value="graph_only">그래프 전용</SelectItem>
+                <SelectItem value="vector">벡터 (Legacy)</SelectItem>
+                <SelectItem value="keyword">키워드 (Legacy)</SelectItem>
+                <SelectItem value="graph">그래프 (Legacy)</SelectItem>
               </SelectContent>
             </Select>
             {mode === "cascading" && (
@@ -151,7 +168,7 @@ export function SearchForm() {
           </div>
 
           {/* Hybrid 모드 전용 설정 */}
-          {mode === "hybrid" && (
+          {(mode === "hybrid" || mode === "auto") && (
             <>
               <div className="space-y-2">
                 <Label>RRF Constant (k): {rrfConstant}</Label>
@@ -186,6 +203,42 @@ export function SearchForm() {
                 />
               </div>
             </>
+          )}
+
+          {(mode === "hybrid" || mode === "auto") && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>그래프 검색 사용</Label>
+                <Switch
+                  checked={graphEnabled}
+                  onCheckedChange={(v) => form.setValue("graph_enabled", v)}
+                />
+              </div>
+              {graphEnabled && (
+                <>
+                  <div className="space-y-2">
+                    <Label>그래프 가중치: {graphWeight.toFixed(2)}</Label>
+                    <Slider
+                      value={[graphWeight]}
+                      onValueChange={(v) => form.setValue("graph_weight", v[0])}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>그래프 Top-K: {graphTopK}</Label>
+                    <Input
+                      type="number"
+                      value={graphTopK}
+                      min={1}
+                      max={100}
+                      onChange={(e) => form.setValue("graph_top_k", Number(e.target.value))}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {/* Cascading 모드 전용 설정 */}

@@ -29,6 +29,8 @@ RAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augmented G
 | 기능 | 설명 |
 |------|------|
 | **하이브리드 검색** | PGVector 벡터 검색 + Elasticsearch+Nori 키워드 검색 결합. 가중치 조절 가능 |
+| **Auto 검색 정책** | `search_mode=auto`에서 질의 분류(extraction/regulatory/explanatory + 관계형 키워드) 기반으로 벡터/키워드/그래프 가중치 자동 조정 |
+| **그래프 검색(선택)** | Neo4j 기반 `graph_only` 및 hybrid/auto 내 graph 결합 검색 지원 |
 | **한국어 리랭커** | `dragonkue/bge-reranker-v2-m3-ko` -- 한국어 AutoRAG F1=0.9123 전체 1위 |
 | **HyDE** | Hypothetical Document Embeddings -- LLM이 가상 문서를 생성하여 검색 정확도 향상 |
 | **Query Expansion + Cascading Search** | 쿼리 확장 및 단계별 검색으로 recall 극대화 |
@@ -95,6 +97,7 @@ RAG는 **한국어에 최적화된 프로덕션 레벨 RAG(Retrieval-Augmented G
 | **프론트엔드** | Next.js + React + shadcn/ui | 16 / 19 |
 | **벡터 DB** | PostgreSQL + PGVector | PG 17 |
 | **키워드 검색** | Elasticsearch + Nori | 8.x |
+| **그래프 DB (선택)** | Neo4j | 5.x |
 | **작업 큐** | Celery + Redis | 5.4+ / 7 |
 | **임베딩 (기본)** | Ollama bge-m3 | 1024차원 |
 | **LLM (기본)** | Ollama exaone3.5:7.8b | -- |
@@ -139,6 +142,15 @@ RAG_EMBEDDING_MODEL=bge-m3
 RAG_EMBEDDING_DIMENSIONS=1024
 RAG_LLM_PROVIDER=ollama
 RAG_LLM_MODEL=exaone3.5:7.8b
+
+# 선택: Graph 검색(Neo4j)
+NEO4J_ENABLED=true
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=changeme
+# 기본은 UI 설정값 사용, 강제 시에만 true
+RAG_GRAPH_OVERRIDE=false
+RAG_GRAPH_ENABLED=true
 
 # 선택: RAGAS 평가 모델
 RAGAS_LLM_PROVIDER=ollama
@@ -249,6 +261,7 @@ docker compose up -d langfuse-web langfuse-worker rag-clickhouse langfuse-redis 
 | 백엔드 API (Swagger) | http://localhost:8000/docs |
 | 프론트엔드 관리자 UI | http://localhost:3500 |
 | Langfuse 대시보드 | http://localhost:3100 |
+| Neo4j Browser (선택) | http://localhost:7474 |
 
 ---
 
@@ -266,7 +279,9 @@ urstory-rag/
 │   │   │   ├── document/       #   문서 파싱 (PDF, DOCX, MD)
 │   │   │   ├── embedding/      #   Ollama/OpenAI 임베딩
 │   │   │   ├── evaluation/     #   RAGAS 평가
+│   │   │   ├── fusion/         #   SearchPolicy + RRF Fusion
 │   │   │   ├── generation/     #   LLM 답변 생성
+│   │   │   ├── graph/          #   Neo4j graph 인덱싱/검색
 │   │   │   ├── guardrails/     #   가드레일 (PII, 인젝션, 할루시네이션)
 │   │   │   ├── hyde/           #   HyDE (가상 문서 임베딩)
 │   │   │   ├── reranking/      #   한국어 리랭커

@@ -32,12 +32,15 @@ async def lifespan(app: FastAPI):
     from app.services.providers import build_embedding_provider, build_llm_provider
     from app.services.reranking.korean import KoreanCrossEncoder
     from app.services.search.hybrid import HybridSearchOrchestrator
+    from app.services.search.graph_retriever import GraphRetriever
     from app.services.search.keyword_es import ElasticsearchNoriEngine
     from app.services.search.multi_query import MultiQueryGenerator
+    from app.services.planner.query_planner import QueryPlanner
     from app.services.search.query_expander import QueryExpander
     from app.services.search.question_classifier import QuestionClassifier
     from app.services.search.vector import VectorSearchEngine
     from app.services.settings import SettingsService
+    from app.services.graph.neo4j_client import Neo4jClient
 
     # RAG 설정 로드 (provider/model 등)
     async with _async_session_factory() as _s:
@@ -48,6 +51,17 @@ async def lifespan(app: FastAPI):
 
     vector_engine = VectorSearchEngine(session_factory=_async_session_factory)
     keyword_engine = ElasticsearchNoriEngine(es_url=env.elasticsearch_url)
+    graph_retriever = None
+    app.state.graph_client = None
+    if env.neo4j_enabled:
+        graph_client = Neo4jClient(
+            uri=env.neo4j_uri,
+            user=env.neo4j_user,
+            password=env.neo4j_password,
+            enabled=True,
+        )
+        app.state.graph_client = graph_client
+        graph_retriever = GraphRetriever(graph_client)
     reranker = KoreanCrossEncoder()
     hyde_generator = HyDEGenerator(llm=llm)
 
@@ -57,6 +71,7 @@ async def lifespan(app: FastAPI):
     # Phase 11: 멀티쿼리, 질문 분류, 근거 추출, 숫자 검증
     multi_query_generator = MultiQueryGenerator(llm=llm)
     question_classifier = QuestionClassifier()
+    query_planner = QueryPlanner()
     evidence_extractor = EvidenceExtractor(llm=llm)
     numeric_verifier = NumericVerifier()
 
@@ -64,6 +79,7 @@ async def lifespan(app: FastAPI):
         embedder=embedder,
         vector_engine=vector_engine,
         keyword_engine=keyword_engine,
+        graph_retriever=graph_retriever,
         reranker=reranker,
         hyde_generator=hyde_generator,
         llm=llm,
@@ -71,6 +87,7 @@ async def lifespan(app: FastAPI):
         query_expander=query_expander,
         multi_query_generator=multi_query_generator,
         question_classifier=question_classifier,
+        query_planner=query_planner,
         evidence_extractor=evidence_extractor,
         numeric_verifier=numeric_verifier,
     )
@@ -84,6 +101,8 @@ async def lifespan(app: FastAPI):
 
     # 종료 시 정리
     await settings_session.close()
+    if app.state.graph_client is not None:
+        await app.state.graph_client.close()
     app.state.langfuse_monitor.flush()
 
 

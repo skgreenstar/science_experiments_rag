@@ -61,6 +61,7 @@ dependencies = [
     # 유틸리티
     "pydantic-settings>=2.7",
     "python-dotenv>=1.0",
+    "neo4j>=5.28",
 ]
 
 [project.urls]

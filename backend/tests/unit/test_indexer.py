@@ -78,3 +78,21 @@ class TestDocumentIndexer:
         embedding.embed_documents.assert_not_called()
         pg_store.write.assert_not_called()
         es_store.write.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_index_assigns_unique_chunk_ids_even_with_shared_metadata(self, mock_deps):
+        """청크가 metadata dict를 공유해도 _chunk_id는 청크별로 고유해야 한다."""
+        embedding, pg_store, es_store = mock_deps
+        shared_meta = {"filename": "sample.pdf"}
+        chunks = [
+            Chunk(content="a", chunk_index=0, metadata=shared_meta),
+            Chunk(content="b", chunk_index=1, metadata=shared_meta),
+        ]
+        indexer = DocumentIndexer(embedding, pg_store, es_store)
+
+        await indexer.index("doc-123", chunks)
+
+        ids = [c.metadata.get("_chunk_id") for c in chunks]
+        assert ids[0]
+        assert ids[1]
+        assert ids[0] != ids[1]

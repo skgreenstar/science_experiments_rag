@@ -52,7 +52,7 @@ class ElasticsearchStore:
 
             bulk_body = ""
             for chunk in chunks:
-                chunk_id = str(uuid.uuid4())
+                chunk_id = str((chunk.metadata or {}).get("_chunk_id") or uuid.uuid4())
                 action = json.dumps(
                     {"index": {"_index": self.index_name, "_id": chunk_id}},
                     ensure_ascii=False,

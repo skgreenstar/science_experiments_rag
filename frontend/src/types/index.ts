@@ -78,7 +78,16 @@ export interface ReindexResponse {
 export interface SearchRequest {
   query: string;
   top_k?: number;
-  search_mode?: "hybrid" | "vector" | "keyword" | "cascading";
+  search_mode?:
+    | "auto"
+    | "hybrid"
+    | "vector"
+    | "vector_only"
+    | "keyword"
+    | "keyword_only"
+    | "graph"
+    | "graph_only"
+    | "cascading";
   hyde_enabled?: boolean;
   reranking_enabled?: boolean;
   multi_query_enabled?: boolean;
@@ -130,6 +139,9 @@ export interface RAGSettings {
   rrf_constant: number;
   vector_weight: number;
   keyword_weight: number;
+  graph_enabled: boolean;
+  graph_weight: number;
+  graph_top_k: number;
   // 리랭킹
   reranking_enabled: boolean;
   reranker_model: string;

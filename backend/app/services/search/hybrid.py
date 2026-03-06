@@ -16,6 +16,8 @@ from app.config import RAGSettings
 from app.exceptions import GuardrailViolation
 from app.models.schemas import PipelineStep, SearchPipelineResult, SearchResult
 from app.services.embedding.base import EmbeddingProvider
+from app.services.fusion.rrf import RRFFusion
+from app.services.fusion.search_policy import SearchPolicy
 from app.services.generation.base import LLMProvider
 from app.services.generation.evidence_extractor import EvidenceExtractor
 from app.services.generation.prompts import SYSTEM_PROMPT, build_prompt
@@ -26,13 +28,17 @@ from app.services.guardrails.numeric_verifier import NumericVerifier
 from app.services.guardrails.pii import KoreanPIIDetector
 from app.services.guardrails.retrieval_gate import RetrievalQualityGate
 from app.services.hyde.generator import HyDEGenerator
+from app.services.planner.query_planner import QueryPlanner
 from app.services.reranking.base import Reranker
 from app.services.search.cascading_evaluator import CascadingQualityEvaluator
 from app.services.search.document_scope import DocumentScopeSelector
 from app.services.search.multi_query import MultiQueryGenerator
+from app.services.search.keyword_retriever import KeywordRetriever
+from app.services.search.graph_retriever import GraphRetriever
 from app.services.search.query_expander import QueryExpander
 from app.services.search.question_classifier import QuestionClassifier
 from app.services.search.rrf import RRFCombiner
+from app.services.search.vector_retriever import VectorRetriever
 
 if TYPE_CHECKING:
     from app.monitoring.langfuse import LangfuseMonitor
@@ -56,10 +62,12 @@ class HybridSearchOrchestrator:
         reranker: Reranker,
         hyde_generator: HyDEGenerator,
         llm: LLMProvider,
+        graph_retriever: GraphRetriever | None = None,
         langfuse_monitor: LangfuseMonitor | None = None,
         query_expander: QueryExpander | None = None,
         multi_query_generator: MultiQueryGenerator | None = None,
         question_classifier: QuestionClassifier | None = None,
+        query_planner: QueryPlanner | None = None,
         evidence_extractor: EvidenceExtractor | None = None,
         numeric_verifier: NumericVerifier | None = None,
     ) -> None:
@@ -70,12 +78,21 @@ class HybridSearchOrchestrator:
         self.hyde = hyde_generator
         self.llm = llm
         self.rrf = RRFCombiner()
+        self.rrf_fusion = RRFFusion()
         self.langfuse = langfuse_monitor
         self.query_expander = query_expander or QueryExpander(llm=llm)
+        self.vector_retriever = VectorRetriever(embedder=embedder, vector_engine=vector_engine)
+        self.keyword_retriever = KeywordRetriever(keyword_engine=keyword_engine)
+        self.search_policy = SearchPolicy(
+            vector_retriever=self.vector_retriever,
+            keyword_retriever=self.keyword_retriever,
+            graph_retriever=graph_retriever,
+        )
 
         # Phase 11: 멀티쿼리, 질문 분류, 근거 추출, 숫자 검증
         self.multi_query_generator = multi_query_generator or MultiQueryGenerator(llm=llm)
         self.question_classifier = question_classifier or QuestionClassifier()
+        self.query_planner = query_planner or QueryPlanner()
         self.evidence_extractor = evidence_extractor or EvidenceExtractor(llm=llm)
         self.numeric_verifier = numeric_verifier or NumericVerifier()
 
@@ -165,6 +182,32 @@ class HybridSearchOrchestrator:
         # ── 2. 모드별 검색 실행 × 멀티쿼리 (병렬) ──
         mode = settings.search_mode
 
+        if mode == "auto":
+            decision = self.query_planner.plan(query)
+            mode_value = decision.get("mode", "hybrid")
+            selected_mode = mode_value.value if hasattr(mode_value, "value") else str(mode_value)
+            fallback_mode = decision.get("fallback_mode")
+            fallback_value = (
+                fallback_mode.value if hasattr(fallback_mode, "value") else str(fallback_mode)
+            ) if fallback_mode is not None else "hybrid"
+            trace.append(
+                PipelineStep(
+                    name="query_planner",
+                    passed=True,
+                    duration_ms=0.0,
+                    detail={
+                        "query_type": decision.get("query_type"),
+                        "selected_mode": selected_mode,
+                        "vector_weight": decision.get("vector_weight"),
+                        "keyword_weight": decision.get("keyword_weight"),
+                        "graph_weight": decision.get("graph_weight"),
+                        "graph_requested": bool(decision.get("graph_enabled", False)),
+                        "graph_runtime_enabled": settings.graph_enabled,
+                        "fallback_mode": fallback_value,
+                    },
+                )
+            )
+
         lf_search_span = self._lf_span(lf_trace, "hybrid-search")
 
         search_tasks = []
@@ -172,12 +215,24 @@ class HybridSearchOrchestrator:
             if q == query:
                 # 원문: 기존 파이프라인 (HyDE 적용된 search_query 사용)
                 search_tasks.append(
-                    self._search_single(search_query, query, settings, mode, trace),
+                    self._search_single(
+                        search_query,
+                        query,
+                        settings,
+                        mode,
+                        trace,
+                        question_category=question_type.category,
+                    ),
                 )
             else:
                 # 변형: 벡터+키워드 직접 검색 (HyDE/Cascading 생략)
                 search_tasks.append(
-                    self._search_variant(q, settings),
+                    self._search_variant(
+                        q,
+                        settings,
+                        mode=mode,
+                        question_category=question_type.category,
+                    ),
                 )
 
         all_results = await asyncio.gather(*search_tasks)
@@ -522,62 +577,43 @@ class HybridSearchOrchestrator:
         settings: RAGSettings,
         mode: str,
         trace: list[PipelineStep],
+        question_category: str = "",
     ) -> list[SearchResult]:
         """단일 쿼리에 대해 모드별 검색을 실행한다 (원문 전용)."""
-        if mode == "vector":
-            docs, step = await self._vector_search(search_query, settings)
-            trace.append(step)
-            return docs
-
-        elif mode == "keyword":
-            docs, step = await self._keyword_search(original_query, settings)
-            trace.append(step)
-            return docs
-
-        elif mode == "cascading":
+        if mode == "cascading":
             docs, cascading_steps = await self._cascading_search(
                 original_query, settings,
             )
             trace.extend(cascading_steps)
             return docs
 
-        else:  # hybrid
-            vec_docs, vec_step, kw_docs, kw_step = await self._hybrid_search(
-                search_query, original_query, settings,
-            )
-            trace.append(vec_step)
-            trace.append(kw_step)
-
-            t0 = time.perf_counter()
-            docs = self.rrf.combine(
-                vec_docs, kw_docs,
-                k=settings.rrf_constant,
-                vector_weight=settings.vector_weight,
-                keyword_weight=settings.keyword_weight,
-            )
-            trace.append(PipelineStep(
-                name="rrf_fusion",
-                passed=True,
-                duration_ms=_elapsed_ms(t0),
-                results_count=len(docs),
-            ))
-            return docs
+        docs, policy_steps = await self._policy_search(
+            mode=mode,
+            search_query=search_query,
+            original_query=original_query,
+            settings=settings,
+            question_category=question_category,
+        )
+        trace.extend(policy_steps)
+        return docs
 
     async def _search_variant(
         self,
         query: str,
         settings: RAGSettings,
+        mode: str,
+        question_category: str = "",
     ) -> list[SearchResult]:
         """변형 쿼리 전용 검색 (HyDE/Cascading 생략, 벡터+키워드 직접)."""
-        vec_docs, _, kw_docs, _ = await self._hybrid_search(
-            query, query, settings,
+        variant_mode = "hybrid" if mode == "cascading" else mode
+        docs, _ = await self._policy_search(
+            mode=variant_mode,
+            search_query=query,
+            original_query=query,
+            settings=settings,
+            question_category=question_category,
         )
-        return self.rrf.combine(
-            vec_docs, kw_docs,
-            k=settings.rrf_constant,
-            vector_weight=settings.vector_weight,
-            keyword_weight=settings.keyword_weight,
-        )
+        return docs
 
     @staticmethod
     def _deduplicate_results(
@@ -751,6 +787,198 @@ class HybridSearchOrchestrator:
         )
 
         return vec_results, vec_step, kw_results, kw_step
+
+    async def _policy_search(
+        self,
+        mode: str,
+        search_query: str,
+        original_query: str,
+        settings: RAGSettings,
+        question_category: str = "",
+    ) -> tuple[list[SearchResult], list[PipelineStep]]:
+        effective_mode = mode
+        vector_weight = settings.vector_weight
+        keyword_weight = settings.keyword_weight
+        graph_enabled = settings.graph_enabled
+        graph_weight = settings.graph_weight
+        fallback_mode: str | None = None
+
+        if mode == "auto":
+            decision = self.query_planner.plan(original_query)
+            mode_value = decision.get("mode", "hybrid")
+            effective_mode = mode_value.value if hasattr(mode_value, "value") else str(mode_value)
+            vector_weight = float(decision.get("vector_weight", vector_weight))
+            keyword_weight = float(decision.get("keyword_weight", keyword_weight))
+            graph_enabled = settings.graph_enabled and bool(decision.get("graph_enabled", True))
+            graph_weight = float(decision.get("graph_weight", graph_weight))
+            fb = decision.get("fallback_mode")
+            if fb is not None:
+                fallback_mode = fb.value if hasattr(fb, "value") else str(fb)
+
+        plans = self.search_policy.get_plan(
+            effective_mode,
+            vector_weight=vector_weight,
+            keyword_weight=keyword_weight,
+            graph_enabled=graph_enabled,
+            graph_weight=graph_weight,
+            question_category=question_category,
+            query=original_query,
+        )
+        # weight 0 이하 plan은 실행하지 않는다.
+        plans = [plan for plan in plans if plan.weight > 0]
+        if not plans:
+            step_name = "graph_unavailable" if effective_mode in {"graph", "graph_only"} else "no_retriever_plan"
+            return [], [
+                PipelineStep(
+                    name=step_name,
+                    passed=False,
+                    duration_ms=0.0,
+                    detail={"mode": effective_mode},
+                )
+            ]
+
+        async def _run_plan(plan):
+            t0 = time.perf_counter()
+            query = search_query if plan.query_kind == "vector" else original_query
+            results = await plan.retriever.retrieve(
+                query=query,
+                top_k=settings.graph_top_k if plan.name == "graph_search" else settings.retriever_top_k,
+            )
+            step = PipelineStep(
+                name=plan.name,
+                passed=True,
+                duration_ms=_elapsed_ms(t0),
+                results_count=len(results),
+            )
+            return results, step, plan.weight
+
+        executed = await asyncio.gather(*[_run_plan(plan) for plan in plans])
+        result_lists = [item[0] for item in executed]
+        steps = [item[1] for item in executed]
+        weights = [item[2] for item in executed]
+
+        if len(result_lists) == 1:
+            docs = self._retrieval_results_to_search_results(result_lists[0])
+            should_fallback, fallback_detail = self._auto_fallback_decision(docs, settings)
+            if (
+                mode == "auto"
+                and should_fallback
+                and fallback_mode
+                and fallback_mode not in {"auto", effective_mode}
+            ):
+                fb_docs, fb_steps = await self._policy_search(
+                    mode=fallback_mode,
+                    search_query=search_query,
+                    original_query=original_query,
+                    settings=settings,
+                    question_category=question_category,
+                )
+                steps.append(
+                    PipelineStep(
+                        name="auto_fallback",
+                        passed=True,
+                        duration_ms=0.0,
+                        detail={
+                            "from": effective_mode,
+                            "to": fallback_mode,
+                            **fallback_detail,
+                        },
+                    )
+                )
+                steps.extend(fb_steps)
+                return fb_docs, steps
+            return docs, steps
+
+        t0 = time.perf_counter()
+        fused = self.rrf_fusion.combine(
+            result_lists=result_lists,
+            k=settings.rrf_constant,
+            weights=weights,
+        )
+        steps.append(
+            PipelineStep(
+                name="rrf_fusion",
+                passed=True,
+                duration_ms=_elapsed_ms(t0),
+                results_count=len(fused),
+            )
+        )
+        docs = self._retrieval_results_to_search_results(fused)
+        should_fallback, fallback_detail = self._auto_fallback_decision(docs, settings)
+        if (
+            mode == "auto"
+            and should_fallback
+            and fallback_mode
+            and fallback_mode not in {"auto", effective_mode}
+        ):
+            fb_docs, fb_steps = await self._policy_search(
+                mode=fallback_mode,
+                search_query=search_query,
+                original_query=original_query,
+                settings=settings,
+                question_category=question_category,
+            )
+            steps.append(
+                PipelineStep(
+                    name="auto_fallback",
+                    passed=True,
+                    duration_ms=0.0,
+                    detail={
+                        "from": effective_mode,
+                        "to": fallback_mode,
+                        **fallback_detail,
+                    },
+                )
+            )
+            steps.extend(fb_steps)
+            return fb_docs, steps
+        return docs, steps
+
+    @staticmethod
+    def _auto_fallback_decision(
+        docs: list[SearchResult],
+        settings: RAGSettings,
+    ) -> tuple[bool, dict]:
+        if not docs:
+            return True, {
+                "reason": "no_documents",
+                "top_score": 0.0,
+                "qualifying_count": 0,
+            }
+        if not settings.retrieval_quality_gate_enabled:
+            return False, {"reason": "gate_disabled"}
+        gate = settings.guardrails.retrieval_gate
+        top_score = max(d.score for d in docs)
+        qualifying_count = sum(1 for d in docs if d.score >= gate.min_doc_score)
+        low_top_score = top_score < gate.min_top_score
+        low_qualifying_count = qualifying_count < gate.min_doc_count
+        if low_top_score or low_qualifying_count:
+            return True, {
+                "reason": "quality_threshold_not_met",
+                "top_score": top_score,
+                "min_top_score": gate.min_top_score,
+                "qualifying_count": qualifying_count,
+                "min_doc_count": gate.min_doc_count,
+                "min_doc_score": gate.min_doc_score,
+            }
+        return False, {
+            "reason": "quality_passed",
+            "top_score": top_score,
+            "qualifying_count": qualifying_count,
+        }
+
+    @staticmethod
+    def _retrieval_results_to_search_results(results) -> list[SearchResult]:
+        return [
+            SearchResult(
+                chunk_id=item.chunk_id,
+                document_id=item.doc_id,
+                content=item.content,
+                score=item.score,
+                metadata=item.metadata,
+            )
+            for item in results
+        ]
 
 
 def _elapsed_ms(start: float) -> float:

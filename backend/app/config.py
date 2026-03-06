@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     elasticsearch_url: str = "http://localhost:9200"
     ollama_url: str = "http://localhost:11434"
     redis_url: str = "redis://localhost:6379"
+    neo4j_enabled: bool = False
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "changeme"
 
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
@@ -28,11 +32,20 @@ class Settings(BaseSettings):
     rag_hyde_model: str | None = None
     rag_multi_query_model: str | None = None
     rag_contextual_chunking_model: str | None = None
+    rag_graph_enabled: bool | None = None
+    rag_graph_override: bool = False
     ragas_llm_provider: str = "ollama"
     ragas_llm_model: str = "exaone3.5:7.8b"
     ragas_embedding_provider: str = "ollama"
     ragas_embedding_model: str = "bge-m3"
     upload_max_mb: int = 200
+
+    @field_validator("rag_graph_enabled", mode="before")
+    @classmethod
+    def _normalize_optional_bool(cls, value):
+        if value in ("", None):
+            return None
+        return value
 
 
 class PIIDetectionSettings(BaseModel):
@@ -108,6 +121,9 @@ class RAGSettings(BaseModel):
     rrf_constant: int = 60
     vector_weight: float = 0.5
     keyword_weight: float = 0.5
+    graph_enabled: bool = False
+    graph_weight: float = 0.2
+    graph_top_k: int = 20
 
     # 리랭킹
     reranking_enabled: bool = True
@@ -209,6 +225,8 @@ def apply_env_model_overrides(rag: RAGSettings, env: Settings | None = None) -> 
         )
     if env.rag_llm_temperature is not None:
         updates["llm_temperature"] = env.rag_llm_temperature
+    if env.rag_graph_override and env.rag_graph_enabled is not None:
+        updates["graph_enabled"] = env.rag_graph_enabled
 
     if not updates:
         return rag

@@ -239,6 +239,8 @@ def test_apply_env_model_overrides():
         rag_llm_provider="ollama",
         rag_llm_model="exaone3.5:7.8b",
         rag_llm_temperature=0.1,
+        rag_graph_override=False,
+        rag_graph_enabled=True,
     )
 
     updated = apply_env_model_overrides(rag, env)
@@ -251,3 +253,27 @@ def test_apply_env_model_overrides():
     assert updated.multi_query_model == "exaone3.5:7.8b"
     assert updated.contextual_chunking_model == "exaone3.5:7.8b"
     assert updated.llm_temperature == 0.1
+    # graph는 override 플래그가 true일 때만 env로 강제된다.
+    assert updated.graph_enabled is False
+
+
+def test_apply_env_model_overrides_graph_when_override_enabled():
+    from app.config import RAGSettings, Settings, apply_env_model_overrides
+
+    rag = RAGSettings(graph_enabled=False)
+    env = Settings(
+        rag_graph_override=True,
+        rag_graph_enabled=True,
+    )
+
+    updated = apply_env_model_overrides(rag, env)
+    assert updated.graph_enabled is True
+
+
+def test_optional_bool_env_empty_string_treated_as_none(monkeypatch, tmp_path):
+    """빈 문자열 optional bool 환경변수는 None으로 처리되어야 한다."""
+    monkeypatch.setenv("RAG_GRAPH_ENABLED", "")
+    from app.config import Settings
+
+    settings = Settings(_env_file=tmp_path / ".env.empty")
+    assert settings.rag_graph_enabled is None
